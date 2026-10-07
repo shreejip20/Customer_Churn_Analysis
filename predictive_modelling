@@ -1,0 +1,7 @@
+customer-churn-predictive-modelling/
+│
+├── data/
+│   └── Dataset_ATS_v2_preprocessed.csv
+├── models/
+│
+└── predictive_modelling.ipynb
