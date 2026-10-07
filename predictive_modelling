@@ -1,7 +1,494 @@
-customer-churn-predictive-modelling/
-│
-├── data/
-│   └── Dataset_ATS_v2_preprocessed.csv
-├── models/
-│
-└── predictive_modelling.ipynb
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Customer Churn Prediction – Predictive Modelling\n",
+    "## Data Analyst – Predictive Modelling | Advanced Telecommunications Solutions (ATS)\n\n",
+    "### Objective\n",
+    "Predict whether an ATS customer is likely to churn using supervised machine-learning models. The target variable is `Churn` (0 = retained, 1 = churned). The notebook compares Logistic Regression and Random Forest, evaluates model performance, identifies important predictors, and demonstrates how to generate churn predictions.\n\n",
+    "### Workflow\n",
+    "1. Load and inspect the team-preprocessed dataset.\n",
+    "2. Check data quality and target distribution.\n",
+    "3. Separate predictors (`X`) from the churn target (`y`).\n",
+    "4. Split the data into training and testing sets using stratification.\n",
+    "5. Standardise features for Logistic Regression.\n",
+    "6. Train Logistic Regression and Random Forest models.\n",
+    "7. Compare accuracy, precision, recall, F1-score and ROC-AUC.\n",
+    "8. Visualise the confusion matrix and ROC curves.\n",
+    "9. Examine feature importance.\n",
+    "10. Generate example churn probabilities and export predictions.\n\n",
+    "**Important:** `Churn` is used only as the prediction target and is not included in the model inputs. The dataset is already preprocessed and encoded for modelling."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import pandas as pd\n",
+    "import numpy as np\n",
+    "import matplotlib.pyplot as plt\n",
+    "\n",
+    "from sklearn.model_selection import train_test_split\n",
+    "from sklearn.preprocessing import StandardScaler\n",
+    "from sklearn.pipeline import Pipeline\n",
+    "from sklearn.linear_model import LogisticRegression\n",
+    "from sklearn.ensemble import RandomForestClassifier\n",
+    "from sklearn.metrics import (\n",
+    "    accuracy_score, precision_score, recall_score, f1_score,\n",
+    "    roc_auc_score, confusion_matrix, ConfusionMatrixDisplay,\n",
+    "    classification_report, RocCurveDisplay\n",
+    ")\n",
+    "\n",
+    "pd.set_option('display.max_columns', None)\n",
+    "pd.set_option('display.float_format', '{:.3f}'.format)\n",
+    "print('Libraries imported successfully.')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1. Load the preprocessed dataset"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# This URL is the same preprocessed ATS dataset used in the original notebook.\n",
+    "url = 'https://raw.githubusercontent.com/NithinVarghese97/Customer_Churn_Analysis/main/Data_Preparation/Preprocessed_Dataset/Dataset_ATS_v2_preprocessed.csv'\n",
+    "df = pd.read_csv(url)\n",
+    "\n",
+    "print(f'Dataset shape: {df.shape}')\n",
+    "display(df.head())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2. Data quality checks"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "print('Missing values:', int(df.isnull().sum().sum()))\n",
+    "print('Duplicate rows:', int(df.duplicated().sum()))\n",
+    "print('Columns:', df.columns.tolist())\n",
+    "\n",
+    "print('\\nData types:')\n",
+    "display(df.dtypes.to_frame('dtype'))\n",
+    "\n",
+    "print('\\nTarget distribution:')\n",
+    "display(df['Churn'].value_counts().rename_axis('Churn').to_frame('Count'))\n",
+    "display((df['Churn'].value_counts(normalize=True) * 100).round(2).rename_axis('Churn').to_frame('Percentage'))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Target variable\n",
+    "`Churn` is the supervised-learning target. A value of **1** represents churn and **0** represents a customer who did not churn. The original dataset contains 6,741 records and 12 columns. The predictors are already numerically encoded. fileciteturn1file0L84-L114"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 3. Prepare features and target"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "target = 'Churn'\n",
+    "\n",
+    "X = df.drop(columns=[target]).copy()\n",
+    "y = df[target].astype(int).copy()\n",
+    "\n",
+    "print('Features:', X.columns.tolist())\n",
+    "print('Feature matrix shape:', X.shape)\n",
+    "print('Target shape:', y.shape)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Why this setup?\n",
+    "The goal is prediction rather than customer segmentation. Therefore, all available preprocessed customer variables except `Churn` are used as predictors. This allows the models to learn relationships between customer characteristics and observed churn outcomes."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 4. Train-test split"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "X_train, X_test, y_train, y_test = train_test_split(\n",
+    "    X, y,\n",
+    "    test_size=0.20,\n",
+    "    random_state=42,\n",
+    "    stratify=y\n",
+    ")\n",
+    "\n",
+    "print('Training set:', X_train.shape)\n",
+    "print('Testing set :', X_test.shape)\n",
+    "print('\\nTraining target distribution:')\n",
+    "print(y_train.value_counts(normalize=True).sort_index())\n",
+    "print('\\nTesting target distribution:')\n",
+    "print(y_test.value_counts(normalize=True).sort_index())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Stratification keeps the churn/non-churn proportion approximately consistent between training and testing data. The test set is kept separate so it can provide an unbiased evaluation of the trained models."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 5. Model 1 – Logistic Regression"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "logistic_model = Pipeline([\n",
+    "    ('scaler', StandardScaler()),\n",
+    "    ('model', LogisticRegression(max_iter=2000, random_state=42))\n",
+    "])\n",
+    "\n",
+    "logistic_model.fit(X_train, y_train)\n",
+    "\n",
+    "logistic_pred = logistic_model.predict(X_test)\n",
+    "logistic_prob = logistic_model.predict_proba(X_test)[:, 1]\n",
+    "\n",
+    "print('Logistic Regression trained successfully.')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 6. Model 2 – Random Forest"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "rf_model = RandomForestClassifier(\n",
+    "    n_estimators=300,\n",
+    "    max_depth=None,\n",
+    "    min_samples_split=5,\n",
+    "    random_state=42,\n",
+    "    n_jobs=-1,\n",
+    "    class_weight='balanced'\n",
+    ")\n",
+    "\n",
+    "rf_model.fit(X_train, y_train)\n",
+    "\n",
+    "rf_pred = rf_model.predict(X_test)\n",
+    "rf_prob = rf_model.predict_proba(X_test)[:, 1]\n",
+    "\n",
+    "print('Random Forest trained successfully.')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 7. Evaluate model performance"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def evaluate_model(name, y_true, y_pred, y_prob):\n",
+    "    return {\n",
+    "        'Model': name,\n",
+    "        'Accuracy': accuracy_score(y_true, y_pred),\n",
+    "        'Precision': precision_score(y_true, y_pred, zero_division=0),\n",
+    "        'Recall': recall_score(y_true, y_pred, zero_division=0),\n",
+    "        'F1': f1_score(y_true, y_pred, zero_division=0),\n",
+    "        'ROC_AUC': roc_auc_score(y_true, y_prob)\n",
+    "    }\n",
+    "\n",
+    "results = pd.DataFrame([\n",
+    "    evaluate_model('Logistic Regression', y_test, logistic_pred, logistic_prob),\n",
+    "    evaluate_model('Random Forest', y_test, rf_pred, rf_prob)\n",
+    "]).set_index('Model')\n",
+    "\n",
+    "display(results.round(3))\n",
+    "\n",
+    "print('\\nLogistic Regression classification report:')\n",
+    "print(classification_report(y_test, logistic_pred, target_names=['No Churn', 'Churn'], zero_division=0))\n",
+    "\n",
+    "print('\\nRandom Forest classification report:')\n",
+    "print(classification_report(y_test, rf_pred, target_names=['No Churn', 'Churn'], zero_division=0))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Model selection\n",
+    "ROC-AUC is especially useful here because it evaluates how well the model separates churners from non-churners across probability thresholds. Accuracy, precision, recall and F1-score are also reported so the final choice is not based on a single metric."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "best_model_name = results['ROC_AUC'].idxmax()\n",
+    "print(f'Best model by ROC-AUC: {best_model_name}')\n",
+    "print(f\"ROC-AUC: {results.loc[best_model_name, 'ROC_AUC']:.3f}\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 8. Confusion matrix"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig, axes = plt.subplots(1, 2, figsize=(12, 5))\n",
+    "\n",
+    "ConfusionMatrixDisplay.from_predictions(\n",
+    "    y_test, logistic_pred,\n",
+    "    display_labels=['No Churn', 'Churn'],\n",
+    "    cmap='Blues', ax=axes[0]\n",
+    ")\n",
+    "axes[0].set_title('Logistic Regression')\n",
+    "\n",
+    "ConfusionMatrixDisplay.from_predictions(\n",
+    "    y_test, rf_pred,\n",
+    "    display_labels=['No Churn', 'Churn'],\n",
+    "    cmap='Greens', ax=axes[1]\n",
+    ")\n",
+    "axes[1].set_title('Random Forest')\n",
+    "\n",
+    "plt.tight_layout()\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The confusion matrices show correct and incorrect predictions for each class. In a churn-retention setting, false negatives are particularly important because they represent customers who churned but were not identified by the model."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 9. ROC curve comparison"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "fig, ax = plt.subplots(figsize=(8, 6))\n",
+    "RocCurveDisplay.from_predictions(y_test, logistic_prob, name='Logistic Regression', ax=ax)\n",
+    "RocCurveDisplay.from_predictions(y_test, rf_prob, name='Random Forest', ax=ax)\n",
+    "ax.plot([0, 1], [0, 1], linestyle='--', label='Random baseline')\n",
+    "ax.set_title('ROC Curve Comparison')\n",
+    "ax.legend()\n",
+    "plt.tight_layout()\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 10. Random Forest feature importance"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "feature_importance = pd.DataFrame({\n",
+    "    'Feature': X.columns,\n",
+    "    'Importance': rf_model.feature_importances_\n",
+    "}).sort_values('Importance', ascending=False)\n",
+    "\n",
+    "display(feature_importance)\n",
+    "\n",
+    "top_n = min(10, len(feature_importance))\n",
+    "plot_data = feature_importance.head(top_n).sort_values('Importance')\n",
+    "\n",
+    "plt.figure(figsize=(9, 6))\n",
+    "plt.barh(plot_data['Feature'], plot_data['Importance'])\n",
+    "plt.xlabel('Importance')\n",
+    "plt.ylabel('Feature')\n",
+    "plt.title(f'Top {top_n} Random Forest Features')\n",
+    "plt.tight_layout()\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "### Interpretation\n",
+    "Feature importance indicates which variables the Random Forest used most strongly for its predictions. These values describe predictive contribution within this fitted model; they should not be interpreted as proof that a variable causes churn."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 11. Generate customer churn predictions"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Use the model selected by ROC-AUC.\n",
+    "if best_model_name == 'Random Forest':\n",
+    "    final_model = rf_model\n",
+    "    final_probability = rf_prob\n",
+    "    final_prediction = rf_pred\n",
+    "else:\n",
+    "    final_model = logistic_model\n",
+    "    final_probability = logistic_prob\n",
+    "    final_prediction = logistic_pred\n",
+    "\n",
+    "predictions = X_test.copy()\n",
+    "predictions['Actual_Churn'] = y_test.values\n",
+    "predictions['Predicted_Churn'] = final_prediction\n",
+    "predictions['Churn_Probability'] = final_probability\n",
+    "predictions['Risk_Level'] = pd.cut(\n",
+    "    predictions['Churn_Probability'],\n",
+    "    bins=[-np.inf, 0.30, 0.60, np.inf],\n",
+    "    labels=['Low', 'Medium', 'High']\n",
+    ")\n",
+    "\n",
+    "display(predictions.sort_values('Churn_Probability', ascending=False).head(10))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "The prediction table provides a practical output for customer-retention analysis: a predicted churn class, churn probability, and simple risk category. The probability can be used to prioritise customers for further business review."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 12. Export model results"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "output_path = 'ATS_customer_churn_predictions.csv'\n",
+    "predictions.to_csv(output_path, index=False)\n",
+    "\n",
+    "print(f'Saved: {output_path}')\n",
+    "print('Export shape:', predictions.shape)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 13. Business interpretation\n\n",
+    "The predictive modelling approach estimates the likelihood that an ATS customer will churn based on the available preprocessed customer attributes. Customers with higher predicted churn probability can be prioritised for retention investigation. Model performance should be considered alongside business costs: missing a likely churner and contacting a customer unnecessarily have different consequences.\n\n",
+    "The model identifies predictive patterns rather than causal relationships. Any retention action should therefore be validated with business knowledge and, where appropriate, further experimentation."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 14. Limitations\n\n",
+    "- The dataset is preprocessed and encoded, so this notebook assumes the provided feature representation is appropriate for modelling.\n",
+    "- The train/test split provides a single hold-out evaluation; cross-validation and hyperparameter tuning could improve robustness.\n",
+    "- Random Forest feature importance is model-specific and does not establish causality.\n",
+    "- The probability thresholds used for Low/Medium/High risk are illustrative and should be calibrated to business requirements.\n",
+    "- If the underlying dataset changes, the complete modelling workflow should be rerun.\n",
+    "- Predictive performance does not guarantee future performance if customer behaviour or business conditions change."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 15. Final conclusion\n\n",
+    "Two supervised classification approaches were trained to predict customer churn: Logistic Regression and Random Forest. Their performance was compared using accuracy, precision, recall, F1-score and ROC-AUC. The model with the strongest ROC-AUC in this run was selected for the example churn-probability output.\n\n",
+    "This completes the ATS predictive-modelling workflow from data loading through model evaluation and customer-level churn prediction."
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.x"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
